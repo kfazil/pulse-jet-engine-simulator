@@ -1,0 +1,13 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  @apply font-sans text-[#eef3ff] bg-[#060811];
+}
+.animate-nebula {
+  background:
+    radial-gradient(800px 500px at 15% 20%, rgba(16, 138, 255, 0.28), transparent 60%),
+    radial-gradient(700px 600px at 85% 70%, rgba(255, 84, 184, 0.22), transparent 60%),
+    radial-gradient(900px 900px at 40% 60%, rgba(77, 255, 232, 0.12), transparent 70%);
+}

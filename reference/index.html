@@ -1,0 +1,1106 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Pulse Jet — Futuristic Simulator</title>
+<style>
+  :root{
+    --bg:#060811;
+    --fg:#eef3ff;
+    --accent:#68e0ff;
+    --accent2:#ff7df2;
+    --glass: rgba(255,255,255,0.06);
+    --glass-border: rgba(255,255,255,0.18);
+    --shadow: 0 10px 40px rgba(0,0,0,0.45);
+  }
+  html,body{height:100%;margin:0;background:radial-gradient(1200px 800px at 70% 30%, #0e1230 0%, #070a18 50%, #040611 100%); color:var(--fg); font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial;}
+  /* star glow */
+  .nebula {
+    position: fixed; inset: 0; pointer-events:none; mix-blend-mode: screen;
+    background:
+      radial-gradient(800px 500px at 15% 20%, rgba(16, 138, 255, 0.28), transparent 60%),
+      radial-gradient(700px 600px at 85% 70%, rgba(255, 84, 184, 0.22), transparent 60%),
+      radial-gradient(900px 900px at 40% 60%, rgba(77, 255, 232, 0.12), transparent 70%);
+    filter: blur(10px);
+    animation: neb 18s ease-in-out infinite alternate;
+  }
+  @keyframes neb { 
+    0% { filter: blur(10px) saturate(120%); } 
+    100% { filter: blur(18px) saturate(180%); } 
+  }
+
+  /* layout */
+  .wrap{position:fixed; inset:0; display:grid; grid-template-columns: 1fr 420px; gap:0;}
+  .sim{position:relative; overflow:hidden;}
+  canvas#sim{position:absolute; inset:0;}
+  canvas#hud{position:absolute; inset:0; pointer-events:none;}
+
+  .panel{
+    backdrop-filter: blur(14px) saturate(140%);
+    background: linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.04));
+    border-left: 1px solid var(--glass-border);
+    box-shadow: var(--shadow);
+    display:flex; flex-direction:column; gap:18px; padding:24px;
+  }
+  .title{
+    letter-spacing: .24em; text-transform: uppercase; font-weight:700; font-size:13px; opacity:.9;
+    display:flex; align-items:center; gap:10px;
+  }
+  .badge{ width:10px; height:10px; border-radius:50%;
+    background: radial-gradient(circle at 30% 30%, #fff, var(--accent)); box-shadow: 0 0 16px var(--accent);
+  }
+  .h1{ font-size:22px; margin-top:4px; font-weight:800; letter-spacing:.04em;}
+  .sep{ height:1px; background:linear-gradient(90deg, transparent, var(--glass-border), transparent); margin:4px 0 10px;}
+  .control{
+    background: var(--glass);
+    border: 1px solid var(--glass-border);
+    border-radius: 14px; padding:14px 14px 10px; box-shadow: var(--shadow);
+  }
+  .control h3{ margin:0 0 8px; font-size:12px; letter-spacing:.18em; text-transform:uppercase; opacity:.85;}
+  .row{ display:flex; align-items:center; gap:12px;}
+  .val{ margin-left:auto; font-variant-numeric: tabular-nums; opacity:.9;}
+  input[type="range"]{ -webkit-appearance:none; width:100%; height:4px; border-radius:999px; background:linear-gradient(90deg, var(--accent), var(--accent2)); outline:none;}
+  input[type="range"]::-webkit-slider-thumb{ -webkit-appearance:none; width:18px; height:18px; border-radius:50%; background:#fff; box-shadow:0 0 12px var(--accent); border:3px solid var(--accent);}
+  input[type="range"]::-moz-range-thumb{ width:18px; height:18px; border-radius:50%; background:#fff; border:3px solid var(--accent); }
+
+  .gauges{ display:grid; grid-template-columns:1fr 1fr; gap:12px;}
+  .g{ background: var(--glass); border:1px solid var(--glass-border); border-radius:16px; padding:16px; text-align:center;}
+  .g h4{ margin:2px 0 8px; font-size:11px; letter-spacing:.18em; text-transform:uppercase; opacity:.8;}
+  .g .big{ font-size:28px; font-weight:800; letter-spacing:.02em;}
+  .keys{font-size:12px; opacity:.8; margin-top:auto;}
+  .keys code{background:rgba(255,255,255,0.08); padding:2px 6px; border-radius:8px; border:1px solid var(--glass-border);}
+
+  /* fullscreen helper */
+  .hint{ position:absolute; bottom:14px; right:14px; font-size:12px; opacity:.75; background:rgba(0,0,0,.35); padding:8px 10px; border-radius:10px; border:1px solid rgba(255,255,255,.15);}
+</style>
+</head>
+<body>
+<div class="nebula"></div>
+<div class="wrap">
+  <div class="sim">
+    <canvas id="sim"></canvas>
+    <canvas id="hud"></canvas>
+    <div class="hint">Click to enable audio • Press <b>F</b> fullscreen • <b>M</b> mute</div>
+  </div>
+
+  <aside class="panel">
+    <div class="title"><span class="badge"></span>PULSE JET INTERFACE</div>
+    <div class="h1">VX‑Δ “Aether” Simulator</div>
+    <div class="sep"></div>
+
+
+    <div class="control">
+      <h3>Tube Length</h3>
+      <div class="row">
+        <input id="tube" type="range" min="0.6" max="2.2" step="0.01" value="1.4">
+        <div class="val"><span id="tubeVal">1.40</span> m</div>
+      </div>
+    </div>
+    <div class="control">
+      <h3>Pulse Frequency</h3>
+      <div class="row">
+        <input id="freq" type="range" min="5" max="30" step="0.1" value="15">
+        <div class="val"><span id="freqVal">15.0</span> Hz</div>
+      </div>
+    </div>
+    <div class="control">
+      <h3>Fuel Flow</h3>
+      <div class="row">
+        <input id="fuel" type="range" min="0.2" max="1.0" step="0.01" value="0.7">
+        <div class="val"><span id="fuelVal">0.70</span> ϕ</div>
+      </div>
+    </div>
+    <div class="control">
+      <h3>Exhaust Color</h3>
+      <div class="row">
+        <input id="exhaustColor" type="color" value="#68e0ff">
+        <div class="val"><span id="exhaustColorVal">#68e0ff</span></div>
+      </div>
+    </div>
+
+    <div class="gauges">
+      <div class="g">
+        <h4>Thrust</h4>
+        <div class="big" id="thrustOut">0.0 N</div>
+        <div class="bar"><div id="thrustBar" class="barfill"></div></div>
+      </div>
+      <div class="g">
+        <h4>Pulse Rate</h4>
+        <div class="big" id="rateOut">—</div>
+        <div class="bar"><div id="rateBar" class="barfill"></div></div>
+      </div>
+      <div class="g">
+        <h4>Chamber Temp</h4>
+        <div class="big" id="tempOut">—</div>
+        <div class="bar"><div id="tempBar" class="barfill"></div></div>
+      </div>
+      <div class="g">
+        <h4>Audio</h4>
+        <div class="big" id="audioOut">Muted</div>
+      </div>
+    </div>
+    <div class="control">
+      <h3>Educational Overlays</h3>
+      <div class="row">
+        <label><input type="checkbox" id="showArrows" checked> Arrows</label>
+        <label><input type="checkbox" id="showHeat" checked> Heat Map</label>
+        <label><input type="checkbox" id="showWaves" checked> Pressure Waves</label>
+      </div>
+    </div>
+    <div class="control">
+      <h3>Camera View</h3>
+      <div class="row"><span id="cameraView" style="font-weight:bold; letter-spacing:.12em;"></span></div>
+    </div>
+
+    <div class="keys">
+      Controls: <code>F</code> fullscreen, <code>M</code> mute audio, <code>Space</code> pause
+    </div>
+  </aside>
+</div>
+
+<script>
+/* ===== Canvas Setup ===== */
+const sim = document.getElementById('sim');
+const hud = document.getElementById('hud');
+const sctx = sim.getContext('2d');
+const hctx = hud.getContext('2d', { alpha: true });
+
+function resize(){
+  sim.width = sim.clientWidth = sim.parentElement.clientWidth;
+  sim.height = sim.clientHeight = sim.parentElement.clientHeight;
+  hud.width = sim.width; hud.height = sim.height;
+}
+window.addEventListener('resize', resize);
+resize();
+
+/* ===== Parameters & State ===== */
+const ui = {
+  tube: document.getElementById('tube'),
+  freq: document.getElementById('freq'),
+  fuel: document.getElementById('fuel'),
+  exhaustColor: document.getElementById('exhaustColor'),
+  tubeVal: document.getElementById('tubeVal'),
+  freqVal: document.getElementById('freqVal'),
+  fuelVal: document.getElementById('fuelVal'),
+  exhaustColorVal: document.getElementById('exhaustColorVal'),
+  thrustOut: document.getElementById('thrustOut'),
+  rateOut: document.getElementById('rateOut'),
+  tempOut: document.getElementById('tempOut'),
+  audioOut: document.getElementById('audioOut'),
+  thrustBar: document.getElementById('thrustBar'),
+  tempBar: document.getElementById('tempBar'),
+  rateBar: document.getElementById('rateBar'),
+  showArrows: document.getElementById('showArrows'),
+  showHeat: document.getElementById('showHeat'),
+  showWaves: document.getElementById('showWaves'),
+  cameraView: document.getElementById('cameraView'),
+  cameraSelect: document.getElementById('cameraSelect'),
+};
+let params = {
+  tubeLen: parseFloat(ui.tube.value),    // meters (visual scale)
+  pulseHz: parseFloat(ui.freq.value),    // Hz
+  fuel: parseFloat(ui.fuel.value),       // 0..1
+  exhaustColor: ui.exhaustColor.value,
+  paused: false,
+  muted: true,
+  camera: 0, // 0: side, 1: cutaway, 2: chamber
+  showArrows: true,
+  showHeat: true,
+  showWaves: true,
+};
+
+/* ===== Web Audio Pulse Synth ===== */
+let audioCtx = null, osc = null, gain = null, modOsc = null;
+function initAudio(){
+  if(audioCtx) return;
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  // Carrier
+  osc = audioCtx.createOscillator();
+  osc.type = 'sawtooth';
+  osc.frequency.value = 110; // base tone
+  // Gain (amplitude)
+  gain = audioCtx.createGain();
+  gain.gain.value = 0.0;
+  // Modulator for pulsing
+  modOsc = audioCtx.createOscillator();
+  modOsc.type = 'square';
+  modOsc.frequency.value = params.pulseHz;
+  // Mod depth
+  const modGain = audioCtx.createGain();
+  modGain.gain.value = 0.45; // depth
+  
+  modOsc.connect(modGain).connect(gain.gain);
+  osc.connect(gain).connect(audioCtx.destination);
+  osc.start(); modOsc.start();
+}
+function updateAudio(){
+  if(!audioCtx) return;
+  modOsc.frequency.value = params.pulseHz;
+  // scale loudness by fuel; gentle limiter
+  const base = params.muted ? 0 : Math.min(0.25, params.fuel * 0.25);
+  gain.gain.value = base;
+  // Add a subtle random pitch modulation for realism
+  osc.frequency.value = 110 + params.pulseHz*2 + Math.sin(time*params.pulseHz)*8;
+  ui.audioOut.textContent = params.muted ? "Muted" : "Live";
+}
+
+/* ===== Particles for Airflow/Exhaust ===== */
+const particles = [];
+function spawnParticles(dt, chamberRect, exhaustX){
+  // intake (blue glow) and exhaust (plasma)
+  const rate = 120 * params.fuel; // particles/sec
+  const n = Math.floor(rate * dt);
+  for(let i=0;i<n;i++){
+    // spawn near intake and chamber mid
+    const inX = chamberRect.x - 80 + Math.random()*30;
+    const inY = chamberRect.y + chamberRect.h*0.5 + (Math.random()-0.5)*chamberRect.h*0.5;
+    // decide direction based on phase gate
+    const phase = Math.sin(time * params.pulseHz * 2*Math.PI);
+    const exhaust = phase > 0; // when positive, “combustion” pushing right
+    const vx = exhaust ? (180 + Math.random()*220) : (40 + Math.random()*40);
+    particles.push({
+      x: exhaust ? (chamberRect.x + Math.random()*chamberRect.w*0.2) : inX,
+      y: inY,
+      vx: exhaust ? vx : 60,
+      vy: (Math.random()-0.5)*30,
+      life: 1.2,
+      hot: exhaust ? (0.6 + Math.random()*0.5) : 0.2
+    });
+  }
+}
+function stepParticles(dt){
+  for(let i=particles.length-1;i>=0;i--){
+    const p = particles[i];
+    p.x += p.vx*dt;
+    p.y += p.vy*dt;
+    p.vy += (Math.random()-0.5)*10*dt;
+    p.life -= dt * (0.6 + p.hot*0.7);
+    if(p.life<=0 || p.x > sim.width+100) particles.splice(i,1);
+  }
+}
+
+/* ===== Simple “Toy” Physics for readouts =====
+   These are visual approximations, not real engine calcs. */
+function computeTelemetry(){
+  const resonance = Math.max(0, 1 - Math.abs(params.tubeLen - (1.6 - params.fuel*0.7)));
+  const thrust = (params.fuel * params.pulseHz) * (0.8 + resonance*1.8);      // N (scaled)
+  const temp = (400 + params.fuel*900) * (0.6 + resonance*0.7);               // K (scaled)
+  return { thrust, temp, rate: params.pulseHz };
+}
+
+/* ===== Drawing ===== */
+let time = 0, last=performance.now();
+
+function drawScene(dt){
+  // background starfield
+  sctx.clearRect(0,0,sim.width,sim.height);
+  // enhanced starfield with nebula
+  for(let i=0;i<80;i++){
+    const x = (i*97 % sim.width);
+    const y = (i*173 % sim.height);
+    const twinkle = (Math.sin((time*0.8+i)*0.9)+1)/2;
+    sctx.save();
+    sctx.shadowColor = '#68e0ff';
+    sctx.shadowBlur = 8;
+    sctx.fillStyle = `rgba(255,255,255,${0.08 + twinkle*0.18})`;
+    sctx.fillRect(x,y,2,2);
+    sctx.restore();
+  }
+
+  // Futuristic backgrounds and overlays for each camera view
+  if(params.camera===0){ // Side view: glowing grid, HUD overlays, engine highlights
+    // Glowing grid
+    sctx.save();
+    sctx.globalAlpha = 0.18;
+    for(let gx=0;gx<sim.width;gx+=40){
+      sctx.beginPath();
+      sctx.moveTo(gx,0); sctx.lineTo(gx,sim.height);
+      sctx.strokeStyle = '#68e0ff';
+      sctx.lineWidth = 1.2;
+      sctx.shadowColor = '#68e0ff';
+      sctx.shadowBlur = 8;
+      sctx.stroke();
+    }
+    for(let gy=0;gy<sim.height;gy+=40){
+      sctx.beginPath();
+      sctx.moveTo(0,gy); sctx.lineTo(sim.width,gy);
+      sctx.strokeStyle = '#ff7df2';
+      sctx.lineWidth = 1.2;
+      sctx.shadowColor = '#ff7df2';
+      sctx.shadowBlur = 8;
+      sctx.stroke();
+    }
+    sctx.restore();
+    // Subtle HUD overlays
+    sctx.save();
+    sctx.globalAlpha = 0.09;
+    sctx.strokeStyle = '#fff';
+    sctx.setLineDash([12,8]);
+    sctx.beginPath();
+    sctx.arc(sim.width*0.18, sim.height*0.55, 120, 0, Math.PI*2);
+    sctx.stroke();
+    sctx.setLineDash([]);
+    sctx.restore();
+    // Engine highlights will be drawn in main engine drawing below
+  } else if(params.camera===1){ // Cutaway view
+    // Engine cross-section: chamber, tube, nozzle
+    let cx = sim.width*0.5;
+    let cy = sim.height*0.55;
+    let tubeLen = 420 * params.tubeLen;
+    let ch = 90;
+    let chamber = { x: cx-tubeLen*0.45, y: cy-ch/2, w: tubeLen*0.45, h: ch };
+    let nozzleX = chamber.x + chamber.w;
+    let exhaustX = nozzleX + tubeLen*0.55;
+    // Futuristic grid background
+    sctx.save();
+    sctx.globalAlpha = 0.13;
+    for(let gx=0;gx<sim.width;gx+=36){
+      sctx.beginPath();
+      sctx.moveTo(gx,0); sctx.lineTo(gx,sim.height);
+      sctx.strokeStyle = '#68e0ff';
+      sctx.lineWidth = 1.1;
+      sctx.stroke();
+    }
+    for(let gy=0;gy<sim.height;gy+=36){
+      sctx.beginPath();
+      sctx.moveTo(0,gy); sctx.lineTo(sim.width,gy);
+      sctx.strokeStyle = '#ff7df2';
+      sctx.lineWidth = 1.1;
+      sctx.stroke();
+    }
+    sctx.restore();
+    // Chamber body
+    sctx.save();
+    sctx.shadowColor = '#ff7df2';
+    sctx.shadowBlur = 18;
+    sctx.fillStyle = 'rgba(255,125,242,0.22)';
+    sctx.fillRect(chamber.x, chamber.y, chamber.w, chamber.h);
+    sctx.restore();
+    // Tube
+    sctx.save();
+    sctx.globalAlpha = 0.18;
+    sctx.fillStyle = 'rgba(104,224,255,0.18)';
+    sctx.fillRect(chamber.x+chamber.w, chamber.y+ch*0.22, tubeLen*0.55, ch*0.56);
+    sctx.restore();
+    // Nozzle
+    sctx.save();
+    sctx.globalAlpha = 0.22;
+    sctx.beginPath();
+    sctx.moveTo(exhaustX, cy-ch*0.28);
+    sctx.lineTo(exhaustX+38, cy);
+    sctx.lineTo(exhaustX, cy+ch*0.28);
+    sctx.closePath();
+    sctx.fillStyle = dynamicExhaustColor;
+    sctx.shadowColor = dynamicExhaustColor;
+    sctx.shadowBlur = 18;
+    sctx.fill();
+    sctx.restore();
+    // Animated exhaust plume
+    let glow = Math.max(0, Math.sin(time*params.pulseHz*2*Math.PI));
+    let heat = params.fuel * 0.8;
+    let flameLen = 60 + 120*params.fuel * (0.4 + glow*0.9);
+    sctx.save();
+    sctx.globalCompositeOperation = 'lighter';
+    for(let i=0;i<6;i++){
+      let phase = Math.sin(time*params.pulseHz*2*Math.PI + i*0.5);
+      let ripple = Math.sin(time*2 + i*1.2)*8;
+      let color = params.exhaustColor;
+      sctx.beginPath();
+      sctx.moveTo(exhaustX, cy - ch*0.18 + ripple);
+      sctx.quadraticCurveTo(exhaustX + flameLen*0.4, cy - ch*0.22 + ripple*0.5, exhaustX + flameLen, cy + phase*12);
+      sctx.quadraticCurveTo(exhaustX + flameLen*0.4, cy + ch*0.22 + ripple*0.5, exhaustX, cy + ch*0.18 + ripple);
+      sctx.closePath();
+      sctx.fillStyle = `rgba(${hexToRgb(color)},${0.18 + heat*0.3})`;
+      sctx.shadowColor = color;
+      sctx.shadowBlur = 24;
+      sctx.fill();
+    }
+    sctx.restore();
+    // Heat/pressure overlays
+    sctx.save();
+    let tempColor = `rgba(255,${180-Math.round(params.fuel*120)},${90+Math.round(params.fuel*80)},${0.18+params.fuel*0.18})`;
+    sctx.fillStyle = tempColor;
+    sctx.globalAlpha = 0.22;
+    sctx.fillRect(chamber.x, chamber.y, chamber.w, chamber.h);
+    sctx.restore();
+    // Internal flow arrows
+    sctx.save();
+    sctx.globalAlpha = 0.7;
+    for(let i=0;i<5;i++){
+      let ax = chamber.x-60+i*18, ay = cy-18+i*6;
+      drawArrow(sctx, ax, ay, ax+32, ay, '#68e0ff');
+    }
+    for(let i=0;i<3;i++){
+      let fx = chamber.x-20, fy = cy-10+i*12;
+      drawArrow(sctx, fx, fy, fx+28, fy, '#ff7df2');
+    }
+    for(let i=0;i<6;i++){
+      let ex = nozzleX+18, ey = cy-12+i*10;
+      drawArrow(sctx, ex, ey, ex+38, ey, '#ffae68');
+    }
+    sctx.restore();
+    // Chamber outline
+    sctx.save();
+    sctx.strokeStyle = `rgba(255,255,255,0.25)`;
+    sctx.lineWidth = 2.5;
+    sctx.strokeRect(chamber.x, chamber.y, chamber.w, chamber.h);
+    sctx.restore();
+  } else if(params.camera===2){ // Chamber view
+    // Chamber: animated plasma ring, glowing pressure waves, digital overlays
+    let cx = sim.width*0.5;
+    let cy = sim.height*0.5;
+    let radius = 90 + params.tubeLen*60;
+    // Animated plasma ring
+    sctx.save();
+    sctx.globalAlpha = 0.22;
+    for(let i=0;i<18;i++){
+      let ang = (i/18)*Math.PI*2 + time*0.7;
+      let r = radius*0.92 + Math.sin(time*2+i)*8;
+      sctx.beginPath();
+      sctx.arc(cx+Math.cos(ang)*r, cy+Math.sin(ang)*r, 8+Math.sin(time*2+i)*3, 0, Math.PI*2);
+      sctx.fillStyle = `rgba(104,224,255,${0.18+Math.abs(Math.sin(time+i))*0.18})`;
+      sctx.shadowColor = '#68e0ff';
+      sctx.shadowBlur = 18;
+      sctx.fill();
+    }
+    sctx.restore();
+    // Digital overlays
+    sctx.save();
+    sctx.globalAlpha = 0.18;
+    sctx.strokeStyle = '#fff';
+    sctx.setLineDash([8,8]);
+    sctx.beginPath();
+    sctx.arc(cx,cy,radius*0.7,0,Math.PI*2);
+    sctx.stroke();
+    sctx.setLineDash([]);
+    sctx.restore();
+  } else if(params.camera===3){ // Thermal Imaging view
+    // Visualize temperature gradients and heat flow
+    let cx = sim.width*0.5;
+    let cy = sim.height*0.55;
+    let tubeLen = 420 * params.tubeLen;
+    let ch = 90;
+    let chamber = { x: cx-tubeLen*0.45, y: cy-ch/2, w: tubeLen*0.45, h: ch };
+    let nozzleX = chamber.x + chamber.w;
+    let exhaustX = nozzleX + tubeLen*0.55;
+    // Compute temperature
+    const { temp } = computeTelemetry();
+    // Map temperature to gradient stops
+    let tNorm = Math.max(0, Math.min(1, (temp-300)/1200)); // 300K (cold) to 1500K (hot)
+    let cold = '#0ff', warm = '#ff0', hot = '#f00';
+    let grad = sctx.createLinearGradient(chamber.x, chamber.y, chamber.x+chamber.w, chamber.y+chamber.h);
+    grad.addColorStop(0, cold);
+    grad.addColorStop(Math.max(0.1, tNorm*0.7), warm);
+    grad.addColorStop(Math.max(0.2, tNorm), hot);
+    sctx.save();
+    sctx.globalAlpha = 0.7;
+    sctx.fillStyle = grad;
+    sctx.shadowColor = '#ff7df2';
+    sctx.shadowBlur = 18;
+    sctx.fillRect(chamber.x, chamber.y, chamber.w, chamber.h);
+    sctx.restore();
+    // Draw tube with thermal gradient
+    let tubeGrad = sctx.createLinearGradient(nozzleX, cy, exhaustX, cy);
+    tubeGrad.addColorStop(0, warm);
+    tubeGrad.addColorStop(Math.max(0.2, tNorm), hot);
+    sctx.save();
+    sctx.globalAlpha = 0.5;
+    sctx.fillStyle = tubeGrad;
+    sctx.fillRect(nozzleX, chamber.y+ch*0.22, tubeLen*0.55, ch*0.56);
+    sctx.restore();
+    // Animated heat waves
+    sctx.save();
+    sctx.globalAlpha = 0.22;
+    sctx.strokeStyle = '#fff';
+    sctx.lineWidth = 3;
+    for(let i=0;i<5;i++){
+      sctx.beginPath();
+      for(let x=chamber.x;x<exhaustX;x+=8){
+        let rel = (x-chamber.x)/tubeLen;
+        let y = cy + Math.sin(rel*2*Math.PI*2 + time*params.pulseHz*2 + i)*ch*0.18;
+        if(x===chamber.x) sctx.moveTo(x,y);
+        else sctx.lineTo(x,y);
+      }
+      sctx.stroke();
+    }
+    sctx.restore();
+    // Glow effect for hot zones
+    sctx.save();
+    sctx.globalAlpha = 0.18;
+    sctx.shadowColor = hot;
+    sctx.shadowBlur = 32;
+    sctx.fillStyle = 'rgba(255,0,0,0.18)';
+    sctx.fillRect(nozzleX, chamber.y+ch*0.22, tubeLen*0.55, ch*0.56);
+    sctx.restore();
+    // Temperature readout
+    sctx.save();
+    sctx.globalAlpha = 0.9;
+    sctx.fillStyle = '#fff';
+    sctx.font = 'bold 22px system-ui';
+    sctx.fillText(`Chamber Temp: ${Math.round(temp)} K`, chamber.x+chamber.w+32, chamber.y+ch*0.5);
+    sctx.restore();
+  } else if(params.camera===4){ // Waveform view
+    // Display pressure waves and oscillations
+    sctx.save();
+    sctx.globalAlpha = 0.22;
+    sctx.strokeStyle = '#68e0ff';
+    sctx.lineWidth = 4;
+    sctx.beginPath();
+    for(let x=0;x<sim.width;x+=6){
+      let y = sim.height*0.5 + Math.sin(x/60 + time*params.pulseHz*2)*60;
+      if(x===0) sctx.moveTo(x,y); else sctx.lineTo(x,y);
+    }
+    sctx.stroke();
+    sctx.restore();
+  } else if(params.camera===5){ // Spectral view
+    // Show exhaust color spectrum
+    sctx.save();
+    let grad = sctx.createLinearGradient(0,0,sim.width,0);
+    grad.addColorStop(0,'#68e0ff');
+    grad.addColorStop(0.5,'#ffae68');
+    grad.addColorStop(1,'#ff7df2');
+    sctx.globalAlpha = 0.22;
+    sctx.fillStyle = grad;
+    sctx.fillRect(0,sim.height*0.4,sim.width,sim.height*0.2);
+    sctx.restore();
+  } else if(params.camera===6){ // Diagnostics view
+    // Highlight telemetry, gauges, and performance metrics
+    sctx.save();
+    sctx.globalAlpha = 0.18;
+    sctx.fillStyle = '#0ff';
+    sctx.fillRect(sim.width*0.1, sim.height*0.1, sim.width*0.8, sim.height*0.8);
+    sctx.restore();
+    // ...add HUD overlays...
+  }
+
+  // Camera angle logic
+  let cx, cy, tubePix, ch, chamber, nozzleX, exhaustX;
+  if(params.camera===0){ // Side view
+    cx = sim.width*0.18;
+    cy = sim.height*0.55;
+    tubePix = 500 * params.tubeLen;
+    ch = 80;
+    chamber = { x: cx, y: cy - ch/2, w: tubePix*0.45, h: ch };
+    nozzleX = chamber.x + chamber.w;
+    exhaustX = nozzleX + tubePix*0.55;
+
+    // intake funnel (neon blue)
+    const intakeGrad = sctx.createLinearGradient(chamber.x-140,cy, chamber.x,cy);
+    intakeGrad.addColorStop(0, 'rgba(80,200,255,0.0)');
+    intakeGrad.addColorStop(1, 'rgba(120,220,255,0.8)');
+    sctx.save();
+    sctx.globalCompositeOperation = 'lighter';
+    sctx.fillStyle = intakeGrad;
+    sctx.beginPath();
+    sctx.moveTo(chamber.x-140, cy-2);
+    sctx.lineTo(chamber.x-20, cy-ch*0.55);
+    sctx.lineTo(chamber.x-20, cy+ch*0.55);
+    sctx.closePath();
+    sctx.fill();
+    sctx.restore();
+
+    // chamber body (glass neon)
+    const glow = Math.max(0, Math.sin(time*params.pulseHz*2*Math.PI));
+    const heat = params.fuel * 0.8;
+    const chamberGrad = sctx.createLinearGradient(chamber.x,0, chamber.x+chamber.w,0);
+    chamberGrad.addColorStop(0, `rgba(255,180,90,${0.25 + glow*0.25})`);
+    chamberGrad.addColorStop(1, `rgba(255,90,60,${0.15 + glow*0.35})`);
+    sctx.save();
+    sctx.shadowColor = '#ff7df2';
+    sctx.shadowBlur = 18;
+    sctx.fillStyle = chamberGrad;
+    sctx.fillRect(chamber.x, chamber.y, chamber.w, chamber.h);
+    sctx.restore();
+
+    // chamber outline
+    sctx.strokeStyle = `rgba(255,255,255,0.25)`;
+    sctx.lineWidth = 2;
+    sctx.strokeRect(chamber.x, chamber.y, chamber.w, chamber.h);
+
+    // exhaust plume (plasma flame with swirl/ripple)
+    const flameLen = 120 + 260*params.fuel * (0.4 + glow*0.9);
+    sctx.save();
+    sctx.globalCompositeOperation = 'lighter';
+    for(let i=0;i<8;i++){
+      const phase = Math.sin(time*params.pulseHz*2*Math.PI + i*0.5);
+      const ripple = Math.sin(time*2 + i*1.2)*8;
+      const color = params.exhaustColor;
+      sctx.beginPath();
+      sctx.moveTo(nozzleX, cy - ch*0.28 + ripple);
+      sctx.quadraticCurveTo(nozzleX + flameLen*0.4, cy - ch*0.42 + ripple*0.5, nozzleX + flameLen, cy + phase*12);
+      sctx.quadraticCurveTo(nozzleX + flameLen*0.4, cy + ch*0.42 + ripple*0.5, nozzleX, cy + ch*0.28 + ripple);
+      sctx.closePath();
+      sctx.fillStyle = `rgba(${hexToRgb(color)},${0.18 + heat*0.3})`;
+      sctx.shadowColor = color;
+      sctx.shadowBlur = 24;
+      sctx.fill();
+    }
+    sctx.restore();
+
+    // heat distortion (refraction effect)
+    sctx.save();
+    sctx.globalAlpha = 0.18 + heat*0.18;
+    for(let i=0;i<6;i++){
+      sctx.beginPath();
+      sctx.ellipse(nozzleX + flameLen*0.5, cy, flameLen*0.3, ch*0.22 + Math.sin(time*2+i)*8, 0, 0, Math.PI*2);
+      sctx.fillStyle = 'rgba(255,255,255,0.12)';
+      sctx.fill();
+    }
+    sctx.restore();
+
+    // sparks & debris
+    for(let i=0;i<Math.random()*2;i++){
+      if(Math.random()<0.08){
+        particles.push({
+          x: nozzleX + flameLen*0.8,
+          y: cy + (Math.random()-0.5)*ch*0.5,
+          vx: 180 + Math.random()*220,
+          vy: (Math.random()-0.5)*60,
+          life: 0.5 + Math.random()*0.5,
+          hot: 1.2,
+          spark: true
+        });
+      }
+    }
+
+    // particles
+    spawnParticles(dt, chamber, exhaustX);
+    stepParticles(dt);
+    for(const p of particles){
+      const a = Math.max(0, p.life);
+      if(p.spark){
+        sctx.save();
+        sctx.globalAlpha = a;
+        sctx.shadowColor = '#fff';
+        sctx.shadowBlur = 12;
+        sctx.fillStyle = 'rgba(255,255,180,0.8)';
+        sctx.beginPath(); sctx.arc(p.x,p.y,2.5,0,Math.PI*2); sctx.fill();
+        sctx.restore();
+        continue;
+      }
+      const c1 = `rgba(${180 + p.hot*75|0}, ${110 + p.hot*60|0}, ${255 - p.hot*120|0}, ${0.12 + a*0.5})`;
+      const c2 = `rgba(255, 255, 255, ${0.08 + a*0.3})`;
+      const r = 2 + p.hot*3;
+      const g = sctx.createRadialGradient(p.x,p.y,0,p.x,p.y,r*2.5);
+      g.addColorStop(0, c2); g.addColorStop(1, c1);
+      sctx.fillStyle = g;
+      sctx.beginPath(); sctx.arc(p.x,p.y,r,0,Math.PI*2); sctx.fill();
+    }
+
+    // Educational Layer: Only show overlays in side view
+    if(params.camera===0){
+      if(params.showArrows){
+        // Flow Visualization
+        sctx.save();
+        sctx.globalAlpha = 0.7;
+        for(let i=0;i<6;i++){
+          let ax = chamber.x-60+i*18, ay = cy-18+i*6;
+          drawArrow(sctx, ax, ay, ax+22, ay, '#68e0ff');
+        }
+        for(let i=0;i<3;i++){
+          let fx = chamber.x-20, fy = cy-10+i*12;
+          drawArrow(sctx, fx, fy, fx+18, fy, '#ff7df2');
+        }
+        for(let i=0;i<5;i++){
+          let ex = nozzleX+18, ey = cy-12+i*10;
+          drawArrow(sctx, ex, ey, ex+32, ey, '#ffae68');
+        }
+        sctx.restore();
+      }
+      if(params.showHeat){
+        // Temperature Readout: heat map overlay
+        sctx.save();
+        let tempColor = `rgba(255,${180-Math.round(params.fuel*120)},${90+Math.round(params.fuel*80)},${0.18+params.fuel*0.18})`;
+        sctx.fillStyle = tempColor;
+        sctx.fillRect(chamber.x, chamber.y, chamber.w, chamber.h);
+        sctx.restore();
+      }
+      if(params.showWaves){
+        // Pressure Waves: sine wave inside chamber
+        sctx.save();
+        sctx.strokeStyle = 'rgba(255,255,255,0.45)';
+        sctx.lineWidth = 3;
+        sctx.beginPath();
+        for(let x=chamber.x;x<nozzleX;x+=6){
+          let rel = (x-chamber.x)/chamber.w;
+          let y = cy + Math.sin(rel*2*Math.PI*2 + time*params.pulseHz*2)*ch*0.18;
+          if(x===chamber.x) sctx.moveTo(x,y);
+          else sctx.lineTo(x,y);
+        }
+        sctx.stroke();
+        sctx.restore();
+      }
+    }
+  } else if(params.camera===1){ // Cutaway view
+    // Engine cross-section: chamber, tube, nozzle
+    let cx = sim.width*0.5;
+    let cy = sim.height*0.55;
+    let tubeLen = 420 * params.tubeLen;
+    let ch = 90;
+    let chamber = { x: cx-tubeLen*0.45, y: cy-ch/2, w: tubeLen*0.45, h: ch };
+    let nozzleX = chamber.x + chamber.w;
+    let exhaustX = nozzleX + tubeLen*0.55;
+    // Futuristic grid background
+    sctx.save();
+    sctx.globalAlpha = 0.13;
+    for(let gx=0;gx<sim.width;gx+=36){
+      sctx.beginPath();
+      sctx.moveTo(gx,0); sctx.lineTo(gx,sim.height);
+      sctx.strokeStyle = '#68e0ff';
+      sctx.lineWidth = 1.1;
+      sctx.stroke();
+    }
+    for(let gy=0;gy<sim.height;gy+=36){
+      sctx.beginPath();
+      sctx.moveTo(0,gy); sctx.lineTo(sim.width,gy);
+      sctx.strokeStyle = '#ff7df2';
+      sctx.lineWidth = 1.1;
+      sctx.stroke();
+    }
+    sctx.restore();
+    // Chamber body
+    sctx.save();
+    sctx.shadowColor = '#ff7df2';
+    sctx.shadowBlur = 18;
+    sctx.fillStyle = 'rgba(255,125,242,0.22)';
+    sctx.fillRect(chamber.x, chamber.y, chamber.w, chamber.h);
+    sctx.restore();
+    // Tube
+    sctx.save();
+    sctx.globalAlpha = 0.18;
+    sctx.fillStyle = 'rgba(104,224,255,0.18)';
+    sctx.fillRect(chamber.x+chamber.w, chamber.y+ch*0.22, tubeLen*0.55, ch*0.56);
+    sctx.restore();
+    // Nozzle
+    sctx.save();
+    sctx.globalAlpha = 0.22;
+    sctx.beginPath();
+    sctx.moveTo(exhaustX, cy-ch*0.28);
+    sctx.lineTo(exhaustX+38, cy);
+    sctx.lineTo(exhaustX, cy+ch*0.28);
+    sctx.closePath();
+    sctx.fillStyle = dynamicExhaustColor;
+    sctx.shadowColor = dynamicExhaustColor;
+    sctx.shadowBlur = 18;
+    sctx.fill();
+    sctx.restore();
+    // Animated exhaust plume
+    let glow = Math.max(0, Math.sin(time*params.pulseHz*2*Math.PI));
+    let heat = params.fuel * 0.8;
+    let flameLen = 60 + 120*params.fuel * (0.4 + glow*0.9);
+    sctx.save();
+    sctx.globalCompositeOperation = 'lighter';
+    for(let i=0;i<6;i++){
+      let phase = Math.sin(time*params.pulseHz*2*Math.PI + i*0.5);
+      let ripple = Math.sin(time*2 + i*1.2)*8;
+      let color = params.exhaustColor;
+      sctx.beginPath();
+      sctx.moveTo(exhaustX, cy - ch*0.18 + ripple);
+      sctx.quadraticCurveTo(exhaustX + flameLen*0.4, cy - ch*0.22 + ripple*0.5, exhaustX + flameLen, cy + phase*12);
+      sctx.quadraticCurveTo(exhaustX + flameLen*0.4, cy + ch*0.22 + ripple*0.5, exhaustX, cy + ch*0.18 + ripple);
+      sctx.closePath();
+      sctx.fillStyle = `rgba(${hexToRgb(color)},${0.18 + heat*0.3})`;
+      sctx.shadowColor = color;
+      sctx.shadowBlur = 24;
+      sctx.fill();
+    }
+    sctx.restore();
+    // Heat/pressure overlays
+    sctx.save();
+    let tempColor = `rgba(255,${180-Math.round(params.fuel*120)},${90+Math.round(params.fuel*80)},${0.18+params.fuel*0.18})`;
+    sctx.fillStyle = tempColor;
+    sctx.globalAlpha = 0.22;
+    sctx.fillRect(chamber.x, chamber.y, chamber.w, chamber.h);
+    sctx.restore();
+    // Internal flow arrows
+    sctx.save();
+    sctx.globalAlpha = 0.7;
+    for(let i=0;i<5;i++){
+      let ax = chamber.x-60+i*18, ay = cy-18+i*6;
+      drawArrow(sctx, ax, ay, ax+32, ay, '#68e0ff');
+    }
+    for(let i=0;i<3;i++){
+      let fx = chamber.x-20, fy = cy-10+i*12;
+      drawArrow(sctx, fx, fy, fx+28, fy, '#ff7df2');
+    }
+    for(let i=0;i<6;i++){
+      let ex = nozzleX+18, ey = cy-12+i*10;
+      drawArrow(sctx, ex, ey, ex+38, ey, '#ffae68');
+    }
+    sctx.restore();
+    // Chamber outline
+    sctx.save();
+    sctx.strokeStyle = `rgba(255,255,255,0.25)`;
+    sctx.lineWidth = 2.5;
+    sctx.strokeRect(chamber.x, chamber.y, chamber.w, chamber.h);
+    sctx.restore();
+  } else if(params.camera===2){ // Chamber view
+    // Chamber: animated plasma ring, glowing pressure waves, digital overlays
+    let cx = sim.width*0.5;
+    let cy = sim.height*0.5;
+    let radius = 90 + params.tubeLen*60;
+    // Animated plasma ring
+    sctx.save();
+    sctx.globalAlpha = 0.22;
+    for(let i=0;i<18;i++){
+      let ang = (i/18)*Math.PI*2 + time*0.7;
+      let r = radius*0.92 + Math.sin(time*2+i)*8;
+      sctx.beginPath();
+      sctx.arc(cx+Math.cos(ang)*r, cy+Math.sin(ang)*r, 8+Math.sin(time*2+i)*3, 0, Math.PI*2);
+      sctx.fillStyle = `rgba(104,224,255,${0.18+Math.abs(Math.sin(time+i))*0.18})`;
+      sctx.shadowColor = '#68e0ff';
+      sctx.shadowBlur = 18;
+      sctx.fill();
+    }
+    sctx.restore();
+    // Digital overlays
+    sctx.save();
+    sctx.globalAlpha = 0.18;
+    sctx.strokeStyle = '#fff';
+    sctx.setLineDash([8,8]);
+    sctx.beginPath();
+    sctx.arc(cx,cy,radius*0.7,0,Math.PI*2);
+    sctx.stroke();
+    sctx.setLineDash([]);
+    sctx.restore();
+  } else if(params.camera===3){ // Thermal Imaging view
+    // Visualize temperature gradients and heat flow
+    let cx = sim.width*0.5;
+    let cy = sim.height*0.55;
+    let tubeLen = 420 * params.tubeLen;
+    let ch = 90;
+    let chamber = { x: cx-tubeLen*0.45, y: cy-ch/2, w: tubeLen*0.45, h: ch };
+    let nozzleX = chamber.x + chamber.w;
+    let exhaustX = nozzleX + tubeLen*0.55;
+    // Compute temperature
+    const { temp } = computeTelemetry();
+    // Map temperature to gradient stops
+    let tNorm = Math.max(0, Math.min(1, (temp-300)/1200)); // 300K (cold) to 1500K (hot)
+    let cold = '#0ff', warm = '#ff0', hot = '#f00';
+    let grad = sctx.createLinearGradient(chamber.x, chamber.y, chamber.x+chamber.w, chamber.y+chamber.h);
+    grad.addColorStop(0, cold);
+    grad.addColorStop(Math.max(0.1, tNorm*0.7), warm);
+    grad.addColorStop(Math.max(0.2, tNorm), hot);
+    sctx.save();
+    sctx.globalAlpha = 0.7;
+    sctx.fillStyle = grad;
+    sctx.shadowColor = '#ff7df2';
+    sctx.shadowBlur = 18;
+    sctx.fillRect(chamber.x, chamber.y, chamber.w, chamber.h);
+    sctx.restore();
+    // Draw tube with thermal gradient
+    let tubeGrad = sctx.createLinearGradient(nozzleX, cy, exhaustX, cy);
+    tubeGrad.addColorStop(0, warm);
+    tubeGrad.addColorStop(Math.max(0.2, tNorm), hot);
+    sctx.save();
+    sctx.globalAlpha = 0.5;
+    sctx.fillStyle = tubeGrad;
+    sctx.fillRect(nozzleX, chamber.y+ch*0.22, tubeLen*0.55, ch*0.56);
+    sctx.restore();
+    // Animated heat waves
+    sctx.save();
+    sctx.globalAlpha = 0.22;
+    sctx.strokeStyle = '#fff';
+    sctx.lineWidth = 3;
+    for(let i=0;i<5;i++){
+      sctx.beginPath();
+      for(let x=chamber.x;x<exhaustX;x+=8){
+        let rel = (x-chamber.x)/tubeLen;
+        let y = cy + Math.sin(rel*2*Math.PI*2 + time*params.pulseHz*2 + i)*ch*0.18;
+        if(x===chamber.x) sctx.moveTo(x,y);
+        else sctx.lineTo(x,y);
+      }
+      sctx.stroke();
+    }
+    sctx.restore();
+    // Glow effect for hot zones
+    sctx.save();
+    sctx.globalAlpha = 0.18;
+    sctx.shadowColor = hot;
+    sctx.shadowBlur = 32;
+    sctx.fillStyle = 'rgba(255,0,0,0.18)';
+    sctx.fillRect(nozzleX, chamber.y+ch*0.22, tubeLen*0.55, ch*0.56);
+    sctx.restore();
+    // Temperature readout
+    sctx.save();
+    sctx.globalAlpha = 0.9;
+    sctx.fillStyle = '#fff';
+    sctx.font = 'bold 22px system-ui';
+    sctx.fillText(`Chamber Temp: ${Math.round(temp)} K`, chamber.x+chamber.w+32, chamber.y+ch*0.5);
+    sctx.restore();
+  } else if(params.camera===4){ // Waveform view
+    // Display pressure waves and oscillations
+    sctx.save();
+    sctx.globalAlpha = 0.22;
+    sctx.strokeStyle = '#68e0ff';
+    sctx.lineWidth = 4;
+    sctx.beginPath();
+    for(let x=0;x<sim.width;x+=6){
+      let y = sim.height*0.5 + Math.sin(x/60 + time*params.pulseHz*2)*60;
+      if(x===0) sctx.moveTo(x,y); else sctx.lineTo(x,y);
+    }
+    sctx.stroke();
+    sctx.restore();
+  } else if(params.camera===5){ // Spectral view
+    // Show exhaust color spectrum
+    sctx.save();
+    let grad = sctx.createLinearGradient(0,0,sim.width,0);
+    grad.addColorStop(0,'#68e0ff');
+    grad.addColorStop(0.5,'#ffae68');
+    grad.addColorStop(1,'#ff7df2');
+    sctx.globalAlpha = 0.22;
+    sctx.fillStyle = grad;
+    sctx.fillRect(0,sim.height*0.4,sim.width,sim.height*0.2);
+    sctx.restore();
+  } else if(params.camera===6){ // Diagnostics view
+    // Highlight telemetry, gauges, and performance metrics
+    sctx.save();
+    sctx.globalAlpha = 0.18;
+    sctx.fillStyle = '#0ff';
+    sctx.fillRect(sim.width*0.1, sim.height*0.1, sim.width*0.8, sim.height*0.8);
+    sctx.restore();
+    // ...add HUD overlays...
+  }
+
+  // Neon Glow HUD overlays (futuristic gauges)
+  hctx.clearRect(0,0,hud.width,hud.height);
+  const { thrust, temp, rate } = computeTelemetry();
+  ui.thrustOut.textContent = thrust.toFixed(1) + " N";
+  ui.tempOut.textContent = Math.round(temp) + " K";
+  ui.rateOut.textContent = rate.toFixed(1) + " Hz";
+
+  // gauge arcs with glow
+  function arc(x,y,r,t,color,shadow){ 
+    hctx.save();
+    hctx.shadowColor = shadow;
+    hctx.shadowBlur = 16;
+    hctx.beginPath(); hctx.arc(x,y,r,-Math.PI*0.8,-Math.PI*0.8 + t*1.6*Math.PI); hctx.strokeStyle = color; hctx.lineWidth = 8; hctx.stroke();
+    hctx.restore();
+  }
+  const gx = sim.width*0.12, gy = sim.height*0.18;
+  arc(gx,gy,60, Math.min(1, thrust/40), 'rgba(104,224,255,0.95)', '#68e0ff');
+  arc(gx,gy,44, Math.min(1, (temp-300)/900), 'rgba(255,125,242,0.92)', '#ff7df2');
+  arc(gx,gy,28, Math.min(1, rate/30), 'rgba(255,255,255,0.85)', '#fff');
+  // glowing labels
+  hctx.save();
+  hctx.shadowColor = '#fff';
+  hctx.shadowBlur = 12;
+  hctx.fillStyle = 'rgba(255,255,255,0.85)'; hctx.font = 'bold 14px system-ui';
+  hctx.fillText('THRUST', gx-26, gy-76);
+  hctx.fillText('TEMP',   gx-18, gy-4);
+  hctx.fillText('RATE',   gx-16, gy+56);
+  hctx.restore();
+}
+
+// Draw arrow helper
+function drawArrow(ctx, x1, y1, x2, y2, color){
+  ctx.save();
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
+  // Arrowhead
+  let angle = Math.atan2(y2-y1,x2-x1);
+  ctx.beginPath();
+  ctx.moveTo(x2,y2);
+  ctx.lineTo(x2-8*Math.cos(angle-Math.PI/7),y2-8*Math.sin(angle-Math.PI/7));
+  ctx.lineTo(x2-8*Math.cos(angle+Math.PI/7),y2-8*Math.sin(angle+Math.PI/7));
+  ctx.lineTo(x2,y2);
+  ctx.fillStyle = color;
+  ctx.fill();
+  ctx.restore();
+}
+
+// Helper to convert hex color to rgb
+function hexToRgb(hex){
+  hex = hex.replace('#','');
+  if(hex.length===3) hex = hex[0]+hex[0]+hex[1]+hex[1]+hex[2]+hex[2];
+  const num = parseInt(hex,16);
+  return `${(num>>16)&255},${(num>>8)&255},${num&255}`;
+}
+
+// Helper to compute dynamic exhaust color based on engine settings
+function getExhaustColor(temp, fuel) {
+  // Normalize temperature (300K to 1500K)
+  let tNorm = Math.max(0, Math.min(1, (temp-300)/1200));
+  // Normalize fuel (0.2 to 1.0)
+  let fNorm = Math.max(0, Math.min(1, (fuel-0.2)/0.8));
+  // Blue for hot/lean, orange for rich/cool
+  let r = Math.round(68 + 187*fNorm + 120*(1-tNorm));
+  let g = Math.round(224 - 80*fNorm + 60*(1-tNorm));
+  let b = Math.round(255 - 120*fNorm + 80*tNorm);
+  return `rgb(${r},${g},${b})`;
+}
+
+/* ===== Main Loop ===== */
+function tick(t){
+  const dt = Math.min(0.05, (t - last)/1000);
+  last = t; if(!params.paused){ time += dt; drawScene(dt); }
+  requestAnimationFrame(tick);
+}
+requestAnimationFrame(tick);
+
+/* ===== UI Wiring ===== */
+function syncLabels(){
+  const camNames = ['Side','Cutaway','Chamber','Thermal','Waveform','Spectral','Diagnostics'];
+  ui.cameraView.textContent = camNames[params.camera];
+  if(ui.cameraSelect) ui.cameraSelect.value = params.camera;
+  ui.tubeVal.textContent = params.tubeLen.toFixed(2);
+  ui.freqVal.textContent = params.pulseHz.toFixed(1);
+  ui.fuelVal.textContent = params.fuel.toFixed(2);
+  ui.exhaustColorVal.textContent = params.exhaustColor;
+  // Update bars
+  const { thrust, temp, rate } = computeTelemetry();
+  ui.thrustBar.style.width = Math.min(1, thrust/40)*100 + '%';
+  ui.thrustBar.style.background = 'linear-gradient(90deg,#68e0ff,#ff7df2)';
+  ui.tempBar.style.width = Math.min(1, (temp-300)/900)*100 + '%';
+  ui.tempBar.style.background = 'linear-gradient(90deg,#ff7df2,#ffae68)';
+  ui.rateBar.style.width = Math.min(1, rate/30)*100 + '%';
+  ui.rateBar.style.background = 'linear-gradient(90deg,#eef3ff,#68e0ff)';
+  updateAudio();
+}
+ui.tube.addEventListener('input', e=>{ params.tubeLen = parseFloat(e.target.value); syncLabels(); });
+ui.freq.addEventListener('input', e=>{ params.pulseHz = parseFloat(e.target.value); syncLabels(); });
+ui.fuel.addEventListener('input', e=>{ params.fuel = parseFloat(e.target.value); syncLabels(); });
+ui.exhaustColor.addEventListener('input', e=>{ params.exhaustColor = e.target.value; syncLabels(); });
+ui.showArrows.addEventListener('change', e=>{ params.showArrows = e.target.checked; });
+ui.showHeat.addEventListener('change', e=>{ params.showHeat = e.target.checked; });
+ui.showWaves.addEventListener('change', e=>{ params.showWaves = e.target.checked; });
+ui.cameraSelect.addEventListener('change', e=>{
+  params.camera = parseInt(e.target.value);
+  syncLabels();
+});
+syncLabels();
+
+/* ===== Interactions ===== */
+document.querySelector('.sim').addEventListener('click', ()=>{
+  if(!audioCtx){ initAudio(); params.muted=false; updateAudio(); }
+});
+
+document.addEventListener('keydown', (e)=>{
+  if(e.key.toLowerCase()==='m'){ params.muted = !params.muted; updateAudio(); }
+  if(e.key.toLowerCase()==='f'){
+    if(!document.fullscreenElement){ document.documentElement.requestFullscreen().catch(()=>{}); }
+    else{ document.exitFullscreen().catch(()=>{}); }
+  }
+  if(e.key===' '){ params.paused = !params.paused; e.preventDefault(); }
+  if(e.key.toLowerCase()==='c'){
+    params.camera = (params.camera+1)%3;
+    syncLabels(); // Update camera view label instantly
+  }
+});
+
+/* Initial audio label */
+ui.audioOut.textContent = "Muted";
+
+/* Modern bar styles */
+const style = document.createElement('style');
+style.textContent = `
+  .bar { width:100%; height:10px; background:rgba(255,255,255,0.08); border-radius:8px; margin:6px 0 0; overflow:hidden; border:1px solid var(--glass-border); }
+  .barfill { height:100%; border-radius:8px; box-shadow:0 0 8px var(--accent2); transition:width 0.2s; }
+`;
+document.head.appendChild(style);
+</script>
+</body>
+</html>
